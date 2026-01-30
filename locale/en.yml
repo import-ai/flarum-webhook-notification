@@ -1,0 +1,11 @@
+import-ai-webhook-notification:
+  admin:
+    settings:
+      webhook_url_label: Webhook URL
+      webhook_url_help: The URL to send notification webhooks to. Leave empty to disable.
+      webhook_token_label: Bearer Token
+      webhook_token_help: "Optional Bearer token for Authorization header."
+      timeout_label: Timeout (seconds)
+      timeout_help: Request timeout in seconds. Default is 30.
+      retry_count_label: Retry Count
+      retry_count_help: Number of retry attempts on failure. Default is 3.

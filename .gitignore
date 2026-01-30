@@ -1,0 +1,22 @@
+# Dependencies
+/js/node_modules/
+/vendor/
+
+# IDE
+/.idea/
+/.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# PHP
+.phpunit.result.cache
+.php-cs-fixer.cache
+
+# Logs
+*.log
+
+CLAUDE.md

@@ -1,0 +1,39 @@
+{
+    "name": "import-ai/flarum-webhook-notification",
+    "description": "Webhook notification channel for Flarum - sends notifications via HTTP webhooks",
+    "keywords": [
+        "flarum",
+        "notification",
+        "webhook"
+    ],
+    "type": "flarum-extension",
+    "license": "Apache-2.0",
+    "require": {
+        "flarum/core": "^1.2.0 || ^2.0.0",
+        "guzzlehttp/guzzle": "^7.0"
+    },
+    "authors": [
+        {
+            "name": "Import AI",
+            "role": "Developer"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "ImportAI\\WebhookNotification\\": "src/"
+        }
+    },
+    "extra": {
+        "flarum-extension": {
+            "title": "Webhook Notification Channel",
+            "category": "feature",
+            "icon": {
+                "name": "fas fa-bell",
+                "color": "#fff",
+                "backgroundColor": "#e74c3c"
+            }
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}

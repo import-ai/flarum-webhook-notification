@@ -1,0 +1,11 @@
+import-ai-webhook-notification:
+  admin:
+    settings:
+      webhook_url_label: Webhook URL
+      webhook_url_help: 发送通知 Webhook 的 URL。留空则禁用。
+      webhook_token_label: Bearer Token
+      webhook_token_help: "可选的 Bearer Token，用于 Authorization 请求头。"
+      timeout_label: 超时时间（秒）
+      timeout_help: 请求超时时间（秒）。默认为 30。
+      retry_count_label: 重试次数
+      retry_count_help: 失败时的重试次数。默认为 3。
