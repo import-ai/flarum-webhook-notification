@@ -66,8 +66,9 @@ class SendWebhookNotificationJob extends AbstractJob
 
         $attempt = 0;
         $lastException = null;
+        $maxAttempts = $retryCount + 1; // retry_count is number of retries after initial attempt
 
-        while ($attempt < $retryCount) {
+        while ($attempt < $maxAttempts) {
             try {
                 $client->post($webhookUrl, [
                     'json' => $payload,
@@ -92,7 +93,7 @@ class SendWebhookNotificationJob extends AbstractJob
                     'error' => $e->getMessage(),
                 ]);
 
-                if ($attempt < $retryCount) {
+                if ($attempt < $maxAttempts) {
                     sleep(pow(2, $attempt));
                 }
             }
