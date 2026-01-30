@@ -43,10 +43,11 @@ class WebhookNotificationDriver implements NotificationDriverInterface
 
     public function registerType(string $blueprintClass, array $driversEnabledByDefault): void
     {
+        // Always enable webhook by default for all notification types
         User::registerPreference(
             User::getNotificationPreferenceKey($blueprintClass::getType(), 'webhook'),
             'boolval',
-            in_array('webhook', $driversEnabledByDefault)
+            true
         );
     }
 }
