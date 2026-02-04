@@ -35,9 +35,11 @@ class SendWebhookNotificationJob extends AbstractJob
         $this->subjectType = $subject ? get_class($subject) : null;
 
         $this->data = $blueprint->getData();
-        $this->userIds = array_map(function (User $user) {
-            return $user->id;
+        $this->userIds = array_map(function ($user) {
+            return $user instanceof User ? $user->id : null;
         }, $users);
+        // Filter out any null values (non-User items)
+        $this->userIds = array_filter($this->userIds);
     }
 
     public function handle(
@@ -121,14 +123,17 @@ class SendWebhookNotificationJob extends AbstractJob
                 'type' => $this->subjectType,
             ] : null,
             'data' => $this->data,
-            'recipients' => $recipients->map(function (User $user) {
+            'recipients' => $recipients->map(function ($user) {
+                if (! $user instanceof User) {
+                    return null;
+                }
                 return [
                     'id' => $user->id,
                     'username' => $user->username,
                     'display_name' => $user->display_name,
                     'email' => $user->email,
                 ];
-            })->toArray(),
+            })->filter()->values()->toArray(),
         ];
     }
 

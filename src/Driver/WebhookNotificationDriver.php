@@ -30,8 +30,13 @@ class WebhookNotificationDriver implements NotificationDriverInterface
 
         // Filter users who have enabled webhook notifications for this type
         $type = $blueprint::getType();
-        $recipients = array_filter($users, function (User $user) use ($type) {
-            return (bool) $user->getPreference(User::getNotificationPreferenceKey($type, 'webhook'));
+        $preferenceKey = User::getNotificationPreferenceKey($type, 'webhook');
+
+        $recipients = array_filter($users, function ($user) use ($preferenceKey) {
+            if (! $user instanceof User) {
+                return false;
+            }
+            return (bool) $user->getPreference($preferenceKey);
         });
 
         if (count($recipients) === 0) {
