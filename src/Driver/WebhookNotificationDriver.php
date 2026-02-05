@@ -21,6 +21,14 @@ class WebhookNotificationDriver implements NotificationDriverInterface
         $url = $this->settings->get('import-ai-webhook-notification.webhook_url');
         if (!$url) return;
 
+        // Filter users who have webhook enabled for this notification type
+        $type = $blueprint::getType();
+        $filteredUsers = array_filter($users, fn($u) =>
+            $u->getPreference(User::getNotificationPreferenceKey($type, 'webhook'))
+        );
+
+        if (empty($filteredUsers)) return;
+
         $this->queue->push(new SendWebhookNotificationJob(
             url: $url,
             payload: [
@@ -31,7 +39,7 @@ class WebhookNotificationDriver implements NotificationDriverInterface
                 'from_user' => $blueprint->getFromUser()?->toArray(),
                 'subject' => $blueprint->getSubject()?->toArray(),
                 'data' => $blueprint->getData(),
-                'users' => array_map(fn($u) => $u->toArray(), $users),
+                'users' => array_map(fn($u) => $u->toArray(), $filteredUsers),
             ],
             token: $this->settings->get('import-ai-webhook-notification.webhook_token'),
             timeout: (int) $this->settings->get('import-ai-webhook-notification.timeout', 30)
@@ -41,7 +49,6 @@ class WebhookNotificationDriver implements NotificationDriverInterface
     public function registerType(string $blueprintClass, array $driversEnabledByDefault): void
     {
         // Register preference so the option appears in user settings
-        // But we'll still send notifications regardless of the preference (passthrough)
         User::registerPreference(
             User::getNotificationPreferenceKey($blueprintClass::getType(), 'webhook'),
             'boolval',
