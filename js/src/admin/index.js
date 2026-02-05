@@ -28,15 +28,6 @@ app.initializers.add('import-ai-webhook-notification', function() {
       max: 300,
     })
     .registerSetting({
-      setting: 'import-ai-webhook-notification.retry_count',
-      label: app.translator.trans('import-ai-webhook-notification.admin.settings.retry_count_label'),
-      help: app.translator.trans('import-ai-webhook-notification.admin.settings.retry_count_help'),
-      type: 'number',
-      placeholder: '3',
-      min: 0,
-      max: 10,
-    })
-    .registerSetting({
       setting: 'import-ai-webhook-notification.channel_icon',
       label: app.translator.trans('import-ai-webhook-notification.admin.settings.channel_icon_label'),
       help: [
@@ -60,7 +51,6 @@ app.initializers.add('import-ai-webhook-notification', function() {
 
     const settings = this.settings || {};
     const timeout = parseInt(settings['import-ai-webhook-notification.timeout']?.() || '30', 10);
-    const retryCount = parseInt(settings['import-ai-webhook-notification.retry_count']?.() || '3', 10);
     const channelIcon = settings['import-ai-webhook-notification.channel_icon']?.() || '';
     const channelLabel = settings['import-ai-webhook-notification.channel_label']?.() || '';
 
@@ -69,11 +59,6 @@ app.initializers.add('import-ai-webhook-notification', function() {
     // Validate timeout
     if (isNaN(timeout) || timeout < 1 || timeout > 300) {
       errors.push(app.translator.trans('import-ai-webhook-notification.admin.validation.timeout_invalid'));
-    }
-
-    // Validate retry count
-    if (isNaN(retryCount) || retryCount < 0 || retryCount > 10) {
-      errors.push(app.translator.trans('import-ai-webhook-notification.admin.validation.retry_count_invalid'));
     }
 
     // Validate channel icon format (if provided)
