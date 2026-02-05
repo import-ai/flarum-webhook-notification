@@ -11,39 +11,44 @@ use ImportAI\WebhookNotification\Job\SendWebhookNotificationJob;
 
 class WebhookNotificationDriver implements NotificationDriverInterface
 {
-    protected Queue $queue;
-    protected SettingsRepositoryInterface $settings;
-
-    public function __construct(Queue $queue, SettingsRepositoryInterface $settings)
-    {
-        $this->queue = $queue;
-        $this->settings = $settings;
-    }
+    public function __construct(
+        protected Queue $queue,
+        protected SettingsRepositoryInterface $settings
+    ) {}
 
     public function send(BlueprintInterface $blueprint, array $users): void
     {
-        $webhookUrl = $this->settings->get('import-ai-webhook-notification.webhook_url');
+        $url = $this->settings->get('import-ai-webhook-notification.webhook_url');
+        if (!$url) return;
 
-        if (empty($webhookUrl) || count($users) === 0) {
-            return;
-        }
-
-        // Filter users who have enabled webhook notifications for this type
+        // Filter users who have webhook enabled for this notification type
         $type = $blueprint::getType();
-        $recipients = array_filter($users, function (User $user) use ($type) {
-            return (bool) $user->getPreference(User::getNotificationPreferenceKey($type, 'webhook'));
-        });
+        $filteredUsers = array_filter($users, fn($u) =>
+            $u->getPreference(User::getNotificationPreferenceKey($type, 'webhook'))
+        );
 
-        if (count($recipients) === 0) {
-            return;
-        }
+        if (empty($filteredUsers)) return;
 
-        $this->queue->push(new SendWebhookNotificationJob($blueprint, $recipients));
+        $this->queue->push(new SendWebhookNotificationJob(
+            url: $url,
+            payload: [
+                'event' => 'notification',
+                'timestamp' => \Illuminate\Support\Carbon::now()->toIso8601String(),
+                'type' => $blueprint::getType(),
+                'subject_model' => $blueprint::getSubjectModel(),
+                'from_user' => $blueprint->getFromUser()?->toArray(),
+                'subject' => $blueprint->getSubject()?->toArray(),
+                'data' => $blueprint->getData(),
+                'users' => array_map(fn($u) => $u->toArray(), $filteredUsers),
+            ],
+            token: $this->settings->get('import-ai-webhook-notification.webhook_token'),
+            timeout: (int) $this->settings->get('import-ai-webhook-notification.timeout', 30)
+        ));
     }
 
     public function registerType(string $blueprintClass, array $driversEnabledByDefault): void
     {
-        // Always enable webhook by default for all notification types
+        // Register preference so the option appears in user settings
         User::registerPreference(
             User::getNotificationPreferenceKey($blueprintClass::getType(), 'webhook'),
             'boolval',

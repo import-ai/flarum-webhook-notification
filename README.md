@@ -22,34 +22,42 @@ npm run build        # Production build
 ### Backend (PHP)
 
 - `extend.php` - Registers the notification driver, admin frontend, locales, and settings defaults
-- `src/Driver/WebhookNotificationDriver.php` - Implements `NotificationDriverInterface`, filters users by notification preferences, queues webhook jobs
-- `src/Job/SendWebhookNotificationJob.php` - Queue job that sends HTTP POST to webhook URL with retry logic and exponential backoff
+- `src/Driver/WebhookNotificationDriver.php` - Implements `NotificationDriverInterface`, passthrough all notifications to webhook without filtering
+- `src/Job/SendWebhookNotificationJob.php` - Queue job that sends HTTP POST to webhook URL
 
 ### Frontend (JavaScript)
 
-- `js/src/admin/index.js` - Admin settings page for configuring webhook URL, token, timeout, and retry count
+- `js/src/admin/index.js` - Admin settings page for configuring webhook URL, token, timeout, channel icon, and channel label
+- `js/src/forum/index.js` - User notification preferences for enabling/disabling webhook per notification type
 
 ### Settings Keys
 
 - `import-ai-webhook-notification.webhook_url` - Target webhook endpoint
 - `import-ai-webhook-notification.webhook_token` - Bearer token for Authorization header
 - `import-ai-webhook-notification.timeout` - Request timeout in seconds (default: 30)
-- `import-ai-webhook-notification.retry_count` - Retry attempts on failure (default: 3)
+- `import-ai-webhook-notification.channel_icon` - Icon class for the notification channel (default: `fas fa-globe`)
+- `import-ai-webhook-notification.channel_label` - Label for the notification channel (default: `Webhook`)
 
 ### Webhook Payload Structure
+
+Passthrough mode sends all notification data without filtering. Model objects are converted to arrays via `toArray()`. Only users who have enabled webhook notifications for the specific notification type are included in the payload.
 
 ```json
 {
   "event": "notification",
-  "type": "<notification_type>",
-  "blueprint_class": "<full_class_name>",
   "timestamp": "<ISO8601>",
-  "from_user": { "id": 1, "display_name": "..." },
-  "subject": { "id": 1, "type": "<class_name>" },
+  "type": "<notification_type>",
+  "subject_model": "<class_name>",
+  "from_user": { "id": 1, "username": "...", "display_name": "...", "email": "..." },
+  "subject": { "id": 1, "discussion_id": 2, "user_id": 1, "...": "..." },
   "data": {},
-  "recipients": [{ "id": 1, "username": "...", "display_name": "...", "email": "..." }]
+  "users": [{ "id": 1, "username": "...", "display_name": "...", "email": "..." }]
 }
 ```
+
+### User Notification Preferences
+
+The extension registers a notification preference for each notification type, allowing users to individually enable or disable webhook notifications. By default, webhook notifications are enabled for all notification types. Users can configure these preferences in their account settings.
 
 ## Git Commit Guidelines
 

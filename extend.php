@@ -21,7 +21,6 @@ return [
         ->default('import-ai-webhook-notification.webhook_url', '')
         ->default('import-ai-webhook-notification.webhook_token', '')
         ->default('import-ai-webhook-notification.timeout', 30)
-        ->default('import-ai-webhook-notification.retry_count', 3)
         ->default('import-ai-webhook-notification.channel_icon', 'fas fa-globe')
         ->default('import-ai-webhook-notification.channel_label', 'Webhook')
         ->serializeToForum('webhookNotificationIcon', 'import-ai-webhook-notification.channel_icon')
