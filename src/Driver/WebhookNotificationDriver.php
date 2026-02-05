@@ -5,6 +5,7 @@ namespace ImportAI\WebhookNotification\Driver;
 use Flarum\Notification\Blueprint\BlueprintInterface;
 use Flarum\Notification\Driver\NotificationDriverInterface;
 use Flarum\Settings\SettingsRepositoryInterface;
+use Flarum\User\User;
 use Illuminate\Contracts\Queue\Queue;
 use ImportAI\WebhookNotification\Job\SendWebhookNotificationJob;
 
@@ -39,6 +40,12 @@ class WebhookNotificationDriver implements NotificationDriverInterface
 
     public function registerType(string $blueprintClass, array $driversEnabledByDefault): void
     {
-        // No preferences needed for passthrough
+        // Register preference so the option appears in user settings
+        // But we'll still send notifications regardless of the preference (passthrough)
+        User::registerPreference(
+            User::getNotificationPreferenceKey($blueprintClass::getType(), 'webhook'),
+            'boolval',
+            true
+        );
     }
 }
