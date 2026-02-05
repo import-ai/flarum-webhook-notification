@@ -1,7 +1,6 @@
 {
     "name": "import-ai/flarum-webhook-notification",
     "description": "Webhook notification channel for Flarum - sends notifications via HTTP webhooks",
-    "version": "0.1.0",
     "keywords": [
         "flarum",
         "notification",
