@@ -22,7 +22,7 @@ npm run build        # Production build
 ### Backend (PHP)
 
 - `extend.php` - Registers the notification driver, admin frontend, locales, and settings defaults
-- `src/Driver/WebhookNotificationDriver.php` - Implements `NotificationDriverInterface`, filters users by notification preferences, queues webhook jobs
+- `src/Driver/WebhookNotificationDriver.php` - Implements `NotificationDriverInterface`, passthrough all notifications to webhook without filtering
 - `src/Job/SendWebhookNotificationJob.php` - Queue job that sends HTTP POST to webhook URL with retry logic and exponential backoff
 
 ### Frontend (JavaScript)
@@ -38,16 +38,19 @@ npm run build        # Production build
 
 ### Webhook Payload Structure
 
+Passthrough mode sends all notification data without filtering. Model objects are converted to arrays via `toArray()`.
+
 ```json
 {
   "event": "notification",
-  "type": "<notification_type>",
   "blueprint_class": "<full_class_name>",
   "timestamp": "<ISO8601>",
-  "from_user": { "id": 1, "display_name": "..." },
-  "subject": { "id": 1, "type": "<class_name>" },
+  "type": "<notification_type>",
+  "subject_model": "<class_name>",
+  "from_user": { "id": 1, "username": "...", "display_name": "...", "email": "..." },
+  "subject": { "id": 1, "discussion_id": 2, "user_id": 1, "...": "..." },
   "data": {},
-  "recipients": [{ "id": 1, "username": "...", "display_name": "...", "email": "..." }]
+  "users": [{ "id": 1, "username": "...", "display_name": "...", "email": "..." }]
 }
 ```
 

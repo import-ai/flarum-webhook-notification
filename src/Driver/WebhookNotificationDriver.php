@@ -5,7 +5,6 @@ namespace ImportAI\WebhookNotification\Driver;
 use Flarum\Notification\Blueprint\BlueprintInterface;
 use Flarum\Notification\Driver\NotificationDriverInterface;
 use Flarum\Settings\SettingsRepositoryInterface;
-use Flarum\User\User;
 use Illuminate\Contracts\Queue\Queue;
 use ImportAI\WebhookNotification\Job\SendWebhookNotificationJob;
 
@@ -24,30 +23,27 @@ class WebhookNotificationDriver implements NotificationDriverInterface
     {
         $webhookUrl = $this->settings->get('import-ai-webhook-notification.webhook_url');
 
-        if (empty($webhookUrl) || count($users) === 0) {
+        // Passthrough: send to webhook regardless of users or preferences
+        if (empty($webhookUrl)) {
             return;
         }
 
-        // Filter users who have enabled webhook notifications for this type
-        $type = $blueprint::getType();
-        $recipients = array_filter($users, function (User $user) use ($type) {
-            return (bool) $user->getPreference(User::getNotificationPreferenceKey($type, 'webhook'));
-        });
-
-        if (count($recipients) === 0) {
-            return;
-        }
-
-        $this->queue->push(new SendWebhookNotificationJob($blueprint, $recipients));
+        // Passthrough raw blueprint data with toArray() conversion
+        $this->queue->push(new SendWebhookNotificationJob([
+            'event' => 'notification',
+            'blueprint_class' => get_class($blueprint),
+            'timestamp' => \Illuminate\Support\Carbon::now()->toIso8601String(),
+            'type' => $blueprint::getType(),
+            'subject_model' => $blueprint::getSubjectModel(),
+            'from_user' => $blueprint->getFromUser()?->toArray(),
+            'subject' => $blueprint->getSubject()?->toArray(),
+            'data' => $blueprint->getData(),
+            'users' => array_map(fn($user) => $user->toArray(), $users),
+        ]));
     }
 
     public function registerType(string $blueprintClass, array $driversEnabledByDefault): void
     {
-        // Always enable webhook by default for all notification types
-        User::registerPreference(
-            User::getNotificationPreferenceKey($blueprintClass::getType(), 'webhook'),
-            'boolval',
-            true
-        );
+        // No user preferences needed for passthrough mode
     }
 }
