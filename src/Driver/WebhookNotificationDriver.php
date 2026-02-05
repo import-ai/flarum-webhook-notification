@@ -10,40 +10,35 @@ use ImportAI\WebhookNotification\Job\SendWebhookNotificationJob;
 
 class WebhookNotificationDriver implements NotificationDriverInterface
 {
-    protected Queue $queue;
-    protected SettingsRepositoryInterface $settings;
-
-    public function __construct(Queue $queue, SettingsRepositoryInterface $settings)
-    {
-        $this->queue = $queue;
-        $this->settings = $settings;
-    }
+    public function __construct(
+        protected Queue $queue,
+        protected SettingsRepositoryInterface $settings
+    ) {}
 
     public function send(BlueprintInterface $blueprint, array $users): void
     {
-        $webhookUrl = $this->settings->get('import-ai-webhook-notification.webhook_url');
+        $url = $this->settings->get('import-ai-webhook-notification.webhook_url');
+        if (!$url) return;
 
-        // Passthrough: send to webhook regardless of users or preferences
-        if (empty($webhookUrl)) {
-            return;
-        }
-
-        // Passthrough raw blueprint data with toArray() conversion
-        $this->queue->push(new SendWebhookNotificationJob([
-            'event' => 'notification',
-            'blueprint_class' => get_class($blueprint),
-            'timestamp' => \Illuminate\Support\Carbon::now()->toIso8601String(),
-            'type' => $blueprint::getType(),
-            'subject_model' => $blueprint::getSubjectModel(),
-            'from_user' => $blueprint->getFromUser()?->toArray(),
-            'subject' => $blueprint->getSubject()?->toArray(),
-            'data' => $blueprint->getData(),
-            'users' => array_map(fn($user) => $user->toArray(), $users),
-        ]));
+        $this->queue->push(new SendWebhookNotificationJob(
+            url: $url,
+            payload: [
+                'event' => 'notification',
+                'timestamp' => \Illuminate\Support\Carbon::now()->toIso8601String(),
+                'type' => $blueprint::getType(),
+                'subject_model' => $blueprint::getSubjectModel(),
+                'from_user' => $blueprint->getFromUser()?->toArray(),
+                'subject' => $blueprint->getSubject()?->toArray(),
+                'data' => $blueprint->getData(),
+                'users' => array_map(fn($u) => $u->toArray(), $users),
+            ],
+            token: $this->settings->get('import-ai-webhook-notification.webhook_token'),
+            timeout: (int) $this->settings->get('import-ai-webhook-notification.timeout', 30)
+        ));
     }
 
     public function registerType(string $blueprintClass, array $driversEnabledByDefault): void
     {
-        // No user preferences needed for passthrough mode
+        // No preferences needed for passthrough
     }
 }
