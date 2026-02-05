@@ -36,12 +36,17 @@ class WebhookNotificationDriver implements NotificationDriverInterface
         // Get the base title parameters (discussion title, etc.)
         $titleParams = $this->getTitleParams($blueprint);
 
+        // Get excerpt from subject if available (e.g., post content)
+        $excerpt = $this->getExcerpt($blueprint);
+
+        // Get URL to the subject
+        $subjectUrl = $this->getSubjectUrl($blueprint);
+
         // Group users by their locale preference
         $usersByLocale = $this->groupUsersByLocale($filteredUsers);
 
         // Generate per-user data with localized titles
         $usersWithLang = [];
-        $defaultLocale = $this->locales->getLocale();
 
         foreach ($usersByLocale as $locale => $localeUsers) {
             // Get the translated title for this locale
@@ -70,6 +75,9 @@ class WebhookNotificationDriver implements NotificationDriverInterface
                 'timestamp' => \Illuminate\Support\Carbon::now()->toIso8601String(),
                 'type' => $type,
                 'subject_model' => $blueprint::getSubjectModel(),
+                'title' => $titleParams['{title}'] ?? null,
+                'content' => $excerpt,
+                'url' => $subjectUrl,
                 'from_user' => $blueprint->getFromUser()?->toArray(),
                 'subject' => $blueprint->getSubject()?->toArray(),
                 'data' => $blueprint->getData(),
@@ -109,9 +117,11 @@ class WebhookNotificationDriver implements NotificationDriverInterface
 
         $params = [];
 
-        // Add from_user display name
+        // Add from_user display name (used by notification text translations)
         if ($fromUser) {
             $params['{from_user}'] = $fromUser->display_name;
+            $params['{username}'] = $fromUser->display_name;
+            $params['user'] = $fromUser;
         }
 
         // Extract title from subject (discussion title)
@@ -130,6 +140,103 @@ class WebhookNotificationDriver implements NotificationDriverInterface
         }
 
         return $params;
+    }
+
+    /**
+     * Extract excerpt from the notification subject (e.g., post content).
+     */
+    private function getExcerpt(BlueprintInterface $blueprint): ?string
+    {
+        $subject = $blueprint->getSubject();
+
+        if (!$subject) {
+            return null;
+        }
+
+        // Try to get content from the subject (posts have content)
+        $content = null;
+
+        if (method_exists($subject, 'getAttribute')) {
+            $content = $subject->getAttribute('content');
+        }
+
+        if ($content === null && isset($subject->content)) {
+            $content = $subject->content;
+        }
+
+        // Try contentPlain method (available in Flarum 2.0+)
+        if ($content === null && method_exists($subject, 'contentPlain')) {
+            $content = $subject->contentPlain();
+        }
+
+        if ($content === null) {
+            return null;
+        }
+
+        // Truncate to 200 characters (matching Flarum's frontend)
+        $excerpt = strip_tags($content);
+        if (strlen($excerpt) > 200) {
+            $excerpt = substr($excerpt, 0, 197) . '...';
+        }
+
+        return $excerpt;
+    }
+
+    /**
+     * Build the URL to the notification subject.
+     */
+    private function getSubjectUrl(BlueprintInterface $blueprint): ?string
+    {
+        $subject = $blueprint->getSubject();
+        $data = $blueprint->getData() ?? [];
+
+        if (!$subject) {
+            return null;
+        }
+
+        // Get base URL from settings
+        $baseUrl = $this->settings->get('forum_canonical_url') ?? $this->settings->get('url');
+
+        // Build URL based on subject type
+        if (method_exists($subject, 'discussion')) {
+            // It's a post - link to discussion with post number
+            $discussion = $subject->discussion;
+            if ($discussion) {
+                $postNumber = $data['postNumber'] ?? $data['replyNumber'] ?? $subject->number ?? null;
+                $slug = $this->slugify($discussion->title);
+                $url = "{$baseUrl}/d/{$discussion->id}-{$slug}";
+                if ($postNumber) {
+                    $url .= "/{$postNumber}";
+                }
+                return $url;
+            }
+        }
+
+        // It's a discussion
+        if (method_exists($subject, 'getAttribute') && $subject->getAttribute('title')) {
+            $slug = $this->slugify($subject->title);
+            $postNumber = $data['postNumber'] ?? null;
+            $url = "{$baseUrl}/d/{$subject->id}-{$slug}";
+            if ($postNumber) {
+                $url .= "/{$postNumber}";
+            }
+            return $url;
+        }
+
+        return $baseUrl;
+    }
+
+    /**
+     * Create a URL-friendly slug from a string.
+     */
+    private function slugify(string $text): string
+    {
+        // Convert to lowercase and replace spaces with hyphens
+        $text = strtolower($text);
+        $text = preg_replace('/[^\w\s-]/', '', $text);
+        $text = preg_replace('/[\s]+/', '-', $text);
+        $text = trim($text, '-');
+        return $text;
     }
 
     public function registerType(string $blueprintClass, array $driversEnabledByDefault): void

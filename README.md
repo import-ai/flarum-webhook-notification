@@ -24,6 +24,8 @@ npm run build        # Production build
 - `extend.php` - Registers the notification driver, admin frontend, locales, and settings defaults
 - `src/Driver/WebhookNotificationDriver.php` - Implements `NotificationDriverInterface`, passthrough all notifications to webhook without filtering
 - `src/Job/SendWebhookNotificationJob.php` - Queue job that sends HTTP POST to webhook URL
+- `src/Service/NotificationTitleRegistry.php` - Registry for notification title translation keys with auto-discovery
+- `src/Extend/NotificationTitle.php` - Extender for registering custom notification titles
 
 ### Frontend (JavaScript)
 
@@ -48,6 +50,9 @@ Passthrough mode sends all notification data without filtering. Model objects ar
   "timestamp": "<ISO8601>",
   "type": "<notification_type>",
   "subject_model": "<class_name>",
+  "title": "Hello World",
+  "content": "This is the post excerpt (first 200 chars)...",
+  "url": "http://example.com/d/123-hello-world/5",
   "from_user": { "id": 1, "username": "...", "display_name": "...", "email": "..." },
   "subject": { "id": 1, "discussion_id": 2, "user_id": 1, "...": "..." },
   "data": {},
@@ -58,11 +63,27 @@ Passthrough mode sends all notification data without filtering. Model objects ar
       "display_name": "...",
       "email": "...",
       "lang": "en",
-      "title": "Someone posts in a discussion I'm following"
+      "title": "John posted"
     }
   ]
 }
 ```
+
+#### Payload Fields
+
+| Field | Description |
+|-------|-------------|
+| `event` | Always "notification" |
+| `timestamp` | ISO8601 timestamp of when the notification was triggered |
+| `type` | Notification type (e.g., `newPost`, `postMentioned`) |
+| `subject_model` | Class name of the subject (e.g., `Flarum\Post\Post`) |
+| `title` | Discussion/post title |
+| `content` | Post content excerpt (first 200 characters, plain text) |
+| `url` | Direct link to the discussion/post |
+| `from_user` | User who triggered the notification |
+| `subject` | The notification subject (post/discussion object) |
+| `data` | Additional data from the blueprint (e.g., `postNumber`) |
+| `users` | Array of users who should receive this notification |
 
 #### Per-User Localization
 
@@ -70,37 +91,25 @@ Each user object in the `users` array includes:
 - `lang`: The user's preferred locale (e.g., `en`, `zh-Hans`)
 - `title`: The notification title translated to the user's preferred language
 
-The titles are generated using the same translation keys used in Flarum's notification settings page:
+The titles are generated using the **same translation keys** as Flarum's notification dropdown UI:
 
-| Type | Translation Key (Flarum Core/Extensions) |
-|------|------------------------------------------|
-| `discussionRenamed` | `core.forum.settings.notify_discussion_renamed_label` |
-| `newPost` | `flarum-subscriptions.forum.settings.notify_new_post_label` |
-| `postMentioned` | `flarum-mentions.forum.settings.notify_post_mentioned_label` |
-| `userMentioned` | `flarum-mentions.forum.settings.notify_user_mentioned_label` |
-| `groupMentioned` | `flarum-mentions.forum.settings.notify_group_mentioned_label` |
-| `discussionLocked` | `flarum-lock.forum.settings.notify_discussion_locked_label` |
-| `postLiked` | `flarum-likes.forum.settings.notify_post_liked_label` |
+| Type | Translation Key | English Text |
+|------|-----------------|--------------|
+| `discussionRenamed` | `core.forum.notifications.discussion_renamed_text` | "{username} changed the title" |
+| `newPost` | `flarum-subscriptions.forum.notifications.new_post_text` | "{username} posted" |
+| `postMentioned` | `flarum-mentions.forum.notifications.post_mentioned_text` | "{username} replied to your post" |
+| `userMentioned` | `flarum-mentions.forum.notifications.user_mentioned_text` | "{username} mentioned you" |
+| `groupMentioned` | `flarum-mentions.forum.notifications.group_mentioned_text` | "{username} mentioned a group you're a member of" |
+| `discussionLocked` | `flarum-lock.forum.notifications.discussion_locked_text` | "{username} locked" |
+| `postLiked` | `flarum-likes.forum.notifications.post_liked_text` | "{username} liked your post" |
+| `userSuspended` | `flarum-suspend.forum.notifications.user_suspended_text` | "You have been suspended for {timeReadable}" |
+| `userUnsuspended` | `flarum-suspend.forum.notifications.user_unsuspended_text` | "You have been unsuspended" |
 
 If a user's locale preference is not set, the forum's default locale is used. The extension automatically switches the translator locale for each user group to generate appropriate titles.
 
-#### How Notification Titles Work
-
-The extension generates notification titles using the **same translation keys** that Flarum uses for the notification preferences UI (Settings > Notifications). These keys follow this pattern:
-
-```
-{extension}.forum.settings.notify_{notification_type}_label
-```
-
-For example:
-- `core.forum.settings.notify_discussion_renamed_label` → "Someone renames a discussion I started"
-- `flarum-subscriptions.forum.settings.notify_new_post_label` → "Someone posts in a discussion I'm following"
-
-These translations are already defined by extensions in their locale files (`locale/en.yml`, etc.). The webhook extension simply reuses them.
-
 #### Supporting Custom Notification Types
 
-When new notification types are added by extensions, they work automatically if the extension follows Flarum's convention of defining the notification preference label using the standard pattern.
+When new notification types are added by extensions, they work automatically if the extension follows Flarum's convention of defining the notification dropdown text.
 
 **Auto-Discovery (Works Automatically)**
 
@@ -112,21 +121,18 @@ The extension tries to find the translation key using these strategies (in order
    - `Flarum\Subscriptions\...` → `flarum-subscriptions`
    - `Vendor\ExtensionName\...` → `vendor-extension-name`
 3. **Blueprint namespace**: Check the blueprint's own namespace
-4. **Common prefixes**: Try known extension prefixes as fallback
 
 The standard pattern checked is:
 ```
-{extension}.forum.settings.notify_{snake_case_type}_label
+{extension}.forum.notifications.{snake_case_type}_text
 ```
 
 **Example**: An extension `acme/my-extension` with:
 - Notification type: `customAlert`
 - Subject model: `Acme\MyExtension\Model\Post`
+- Translation key in locale file: `acme-my-extension.forum.notifications.custom_alert_text`
 
-Would automatically find:
-```
-acme-my-extension.forum.settings.notify_custom_alert_label
-```
+Would automatically find the translation.
 
 **Extension Registration (If Auto-Discovery Fails)**
 
@@ -138,7 +144,7 @@ use ImportAI\WebhookNotification\Extend\NotificationTitle;
 
 return [
     (new NotificationTitle())
-        ->type('myNotification', 'my-extension.forum.settings.my_custom_label_key'),
+        ->type('myNotification', 'my-extension.forum.notifications.my_custom_text'),
 ];
 ```
 
@@ -151,7 +157,7 @@ use ImportAI\WebhookNotification\Service\NotificationTitleRegistry;
 
 $registry->register('myNotification', function ($blueprint) {
     // Return translation key based on blueprint data
-    return 'my-extension.notification.' . $blueprint::getType();
+    return 'my-extension.notifications.' . $blueprint::getType();
 });
 ```
 
@@ -204,5 +210,3 @@ refactor(tasks): Add timeout status
 
 - "Generated with Claude Code" or similar attribution
 - "Co-Authored-By: Claude" or any Claude co-author tags
-
-

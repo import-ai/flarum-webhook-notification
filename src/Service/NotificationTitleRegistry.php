@@ -8,6 +8,14 @@ use Flarum\Notification\Blueprint\BlueprintInterface;
 /**
  * Registry for notification type title translation keys.
  * Allows extensions to register custom notification labels.
+ *
+ * This uses the same translation keys as Flarum's notification dropdown UI:
+ *   {extension}.forum.notifications.{type}_text
+ *
+ * Examples:
+ *   - core.forum.notifications.discussion_renamed_text
+ *   - flarum-subscriptions.forum.notifications.new_post_text
+ *   - flarum-mentions.forum.notifications.post_mentioned_text
  */
 class NotificationTitleRegistry
 {
@@ -18,24 +26,29 @@ class NotificationTitleRegistry
 
     /**
      * Default translation keys for known Flarum core and bundled extensions.
+     * These are the keys used by Flarum's notification dropdown UI.
      */
     private const DEFAULT_KEYS = [
         // Core notifications
-        'discussionRenamed' => 'core.forum.settings.notify_discussion_renamed_label',
+        'discussionRenamed' => 'core.forum.notifications.discussion_renamed_text',
 
         // flarum/subscriptions
-        'newPost' => 'flarum-subscriptions.forum.settings.notify_new_post_label',
+        'newPost' => 'flarum-subscriptions.forum.notifications.new_post_text',
 
         // flarum/mentions
-        'postMentioned' => 'flarum-mentions.forum.settings.notify_post_mentioned_label',
-        'userMentioned' => 'flarum-mentions.forum.settings.notify_user_mentioned_label',
-        'groupMentioned' => 'flarum-mentions.forum.settings.notify_group_mentioned_label',
+        'postMentioned' => 'flarum-mentions.forum.notifications.post_mentioned_text',
+        'userMentioned' => 'flarum-mentions.forum.notifications.user_mentioned_text',
+        'groupMentioned' => 'flarum-mentions.forum.notifications.group_mentioned_text',
 
         // flarum/lock
-        'discussionLocked' => 'flarum-lock.forum.settings.notify_discussion_locked_label',
+        'discussionLocked' => 'flarum-lock.forum.notifications.discussion_locked_text',
 
         // flarum/likes
-        'postLiked' => 'flarum-likes.forum.settings.notify_post_liked_label',
+        'postLiked' => 'flarum-likes.forum.notifications.post_liked_text',
+
+        // flarum/suspend
+        'userSuspended' => 'flarum-suspend.forum.notifications.user_suspended_text',
+        'userUnsuspended' => 'flarum-suspend.forum.notifications.user_unsuspended_text',
     ];
 
     public function __construct(
@@ -84,13 +97,13 @@ class NotificationTitleRegistry
      * 3. Checking the blueprint class namespace itself
      * 4. Trying common patterns with known extension prefixes as fallback
      *
-     * Flarum extensions define notification preference labels using this pattern:
-     *   {extension}.forum.settings.notify_{snake_case_type}_label
+     * Flarum extensions define notification dropdown text using this pattern:
+     *   {extension}.forum.notifications.{snake_case_type}_text
      *
      * Examples:
-     *   - core.forum.settings.notify_discussion_renamed_label
-     *   - flarum-subscriptions.forum.settings.notify_new_post_label
-     *   - my-vendor.my-extension.forum.settings.notify_custom_type_label
+     *   - core.forum.notifications.discussion_renamed_text
+     *   - flarum-subscriptions.forum.notifications.new_post_text
+     *   - my-vendor.my-extension.forum.notifications.custom_alert_text
      *
      * @param string $type The notification type
      * @param string|null $subjectModel The subject model class name (e.g., 'Flarum\Discussion\Discussion')
@@ -134,7 +147,22 @@ class NotificationTitleRegistry
         $prefixes = array_unique($prefixes);
 
         foreach ($prefixes as $ext) {
-            // Try snake_case pattern: notify_{snake_type}_label
+            // Try notification text pattern: {type}_text (snake_case)
+            $key = "{$ext}.forum.notifications.{$snakeType}_text";
+            if ($this->translationExists($key)) {
+                return $key;
+            }
+
+            // Try original pattern: {Type}_text
+            $key = "{$ext}.forum.notifications.{$type}_text";
+            if ($this->translationExists($key)) {
+                return $key;
+            }
+        }
+
+        // 5. Also try settings label pattern as fallback
+        foreach ($prefixes as $ext) {
+            // Try snake_case pattern: notify_{type}_label
             $key = "{$ext}.forum.settings.notify_{$snakeType}_label";
             if ($this->translationExists($key)) {
                 return $key;
@@ -192,20 +220,11 @@ class NotificationTitleRegistry
     }
 
     /**
-     * Convert PascalCase to kebab-case.
-     */
-    private function toKebabCase(string $text): string
-    {
-        $text = preg_replace('/([a-z])([A-Z])/', '$1-$2', $text);
-        return strtolower($text);
-    }
-
-    /**
      * Get the translated title for a notification type.
      *
-     * Uses the same translation keys as Flarum's notification preferences UI.
+     * Uses the same translation keys as Flarum's notification dropdown UI.
      * Extensions define these keys in their locale files as:
-     *   {extension}.forum.settings.notify_{snake_case_type}_label
+     *   {extension}.forum.notifications.{snake_case_type}_text
      *
      * @param string $type The notification type
      * @param array $params Translation parameters
@@ -273,6 +292,15 @@ class NotificationTitleRegistry
 
         // If the translator returns the key itself, the translation doesn't exist
         return $translation !== $key;
+    }
+
+    /**
+     * Convert PascalCase to kebab-case.
+     */
+    private function toKebabCase(string $text): string
+    {
+        $text = preg_replace('/([a-z])([A-Z])/', '$1-$2', $text);
+        return strtolower($text);
     }
 
     /**
