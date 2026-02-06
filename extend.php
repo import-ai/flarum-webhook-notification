@@ -4,7 +4,6 @@ namespace ImportAI\WebhookNotification;
 
 use Flarum\Extend;
 use ImportAI\WebhookNotification\Driver\WebhookNotificationDriver;
-use ImportAI\WebhookNotification\Service\NotificationTitleRegistry;
 
 return [
     (new Extend\Frontend('admin'))
@@ -26,16 +25,4 @@ return [
         ->default('import-ai-webhook-notification.channel_label', 'Webhook')
         ->serializeToForum('webhookNotificationIcon', 'import-ai-webhook-notification.channel_icon')
         ->serializeToForum('webhookNotificationLabel', 'import-ai-webhook-notification.channel_label'),
-
-    // Register the notification title registry service
-    (new class implements Extend\ExtenderInterface {
-        public function extend(\Illuminate\Contracts\Container\Container $container, \Flarum\Extension\Extension $extension = null): void
-        {
-            $container->singleton(NotificationTitleRegistry::class, function ($container) {
-                return new NotificationTitleRegistry(
-                    $container->make('flarum.locales')
-                );
-            });
-        }
-    }),
 ];

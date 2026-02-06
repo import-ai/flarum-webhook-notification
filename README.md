@@ -24,8 +24,6 @@ npm run build        # Production build
 - `extend.php` - Registers the notification driver, admin frontend, locales, and settings defaults
 - `src/Driver/WebhookNotificationDriver.php` - Implements `NotificationDriverInterface`, passthrough all notifications to webhook without filtering
 - `src/Job/SendWebhookNotificationJob.php` - Queue job that sends HTTP POST to webhook URL
-- `src/Service/NotificationTitleRegistry.php` - Registry for notification title translation keys with auto-discovery
-- `src/Extend/NotificationTitle.php` - Extender for registering custom notification titles
 
 ### Frontend (JavaScript)
 
@@ -50,9 +48,6 @@ Passthrough mode sends all notification data without filtering. Model objects ar
   "timestamp": "<ISO8601>",
   "type": "<notification_type>",
   "subject_model": "<class_name>",
-  "title": "Hello World",
-  "content": "This is the post excerpt (first 200 chars)...",
-  "url": "http://example.com/d/123-hello-world/5",
   "from_user": { "id": 1, "username": "...", "display_name": "...", "email": "..." },
   "subject": { "id": 1, "discussion_id": 2, "user_id": 1, "...": "..." },
   "data": {},
@@ -77,9 +72,6 @@ Passthrough mode sends all notification data without filtering. Model objects ar
 | `timestamp` | ISO8601 timestamp of when the notification was triggered |
 | `type` | Notification type (e.g., `newPost`, `postMentioned`) |
 | `subject_model` | Class name of the subject (e.g., `Flarum\Post\Post`) |
-| `title` | Discussion/post title |
-| `content` | Post content excerpt (first 200 characters, plain text) |
-| `url` | Direct link to the discussion/post |
 | `from_user` | User who triggered the notification |
 | `subject` | The notification subject (post/discussion object) |
 | `data` | Additional data from the blueprint (e.g., `postNumber`) |
@@ -91,82 +83,30 @@ Each user object in the `users` array includes:
 - `lang`: The user's preferred locale (e.g., `en`, `zh-Hans`)
 - `title`: The notification title translated to the user's preferred language
 
-The titles are generated using the **same translation keys** as Flarum's notification dropdown UI:
+The titles are generated using **auto-discovered translation keys** from Flarum's notification dropdown UI. The extension automatically finds the correct translation key by:
 
-| Type | Translation Key | English Text |
-|------|-----------------|--------------|
+1. Deriving the extension name from the subject model or blueprint namespace
+2. Trying the pattern: `{extension}.forum.notifications.{snake_case_type}_text`
+3. Falling back to: `{extension}.forum.settings.notify_{snake_case_type}_label`
+
+**Examples:**
+
+| Type | Discovered Key | English Text |
+|------|----------------|--------------|
 | `discussionRenamed` | `core.forum.notifications.discussion_renamed_text` | "{username} changed the title" |
 | `newPost` | `flarum-subscriptions.forum.notifications.new_post_text` | "{username} posted" |
 | `postMentioned` | `flarum-mentions.forum.notifications.post_mentioned_text` | "{username} replied to your post" |
-| `userMentioned` | `flarum-mentions.forum.notifications.user_mentioned_text` | "{username} mentioned you" |
-| `groupMentioned` | `flarum-mentions.forum.notifications.group_mentioned_text` | "{username} mentioned a group you're a member of" |
-| `discussionLocked` | `flarum-lock.forum.notifications.discussion_locked_text` | "{username} locked" |
-| `postLiked` | `flarum-likes.forum.notifications.post_liked_text` | "{username} liked your post" |
-| `userSuspended` | `flarum-suspend.forum.notifications.user_suspended_text` | "You have been suspended for {timeReadable}" |
-| `userUnsuspended` | `flarum-suspend.forum.notifications.user_unsuspended_text` | "You have been unsuspended" |
+
+**Extension Namespace Mapping:**
+
+| Namespace | Extension Prefix |
+|-----------|------------------|
+| `Flarum\Discussion\...` | `core` |
+| `Flarum\Subscriptions\...` | `flarum-subscriptions` |
+| `Flarum\Mentions\...` | `flarum-mentions` |
+| `Vendor\ExtensionName\...` | `vendor-extension-name` |
 
 If a user's locale preference is not set, the forum's default locale is used. The extension automatically switches the translator locale for each user group to generate appropriate titles.
-
-#### Supporting Custom Notification Types
-
-When new notification types are added by extensions, they work automatically if the extension follows Flarum's convention of defining the notification dropdown text.
-
-**Auto-Discovery (Works Automatically)**
-
-The extension tries to find the translation key using these strategies (in order):
-
-1. **Type prefix**: If type contains a dot (`my-extension.myType`), extract the prefix
-2. **Subject model namespace**: Derive extension from the subject model class:
-   - `Flarum\Discussion\...` → `core`
-   - `Flarum\Subscriptions\...` → `flarum-subscriptions`
-   - `Vendor\ExtensionName\...` → `vendor-extension-name`
-3. **Blueprint namespace**: Check the blueprint's own namespace
-
-The standard pattern checked is:
-```
-{extension}.forum.notifications.{snake_case_type}_text
-```
-
-**Example**: An extension `acme/my-extension` with:
-- Notification type: `customAlert`
-- Subject model: `Acme\MyExtension\Model\Post`
-- Translation key in locale file: `acme-my-extension.forum.notifications.custom_alert_text`
-
-Would automatically find the translation.
-
-**Extension Registration (If Auto-Discovery Fails)**
-
-If your extension uses a non-standard naming convention, register explicitly:
-
-```php
-// In your extension's extend.php
-use ImportAI\WebhookNotification\Extend\NotificationTitle;
-
-return [
-    (new NotificationTitle())
-        ->type('myNotification', 'my-extension.forum.notifications.my_custom_text'),
-];
-```
-
-**Dynamic Registration (Advanced)**
-
-For dynamic translation keys based on blueprint data:
-
-```php
-use ImportAI\WebhookNotification\Service\NotificationTitleRegistry;
-
-$registry->register('myNotification', function ($blueprint) {
-    // Return translation key based on blueprint data
-    return 'my-extension.notifications.' . $blueprint::getType();
-});
-```
-
-**Fallback Behavior**
-
-If no translation key is found:
-```
-Receive "{type}" notifications via webhook
-```
 
 ### User Notification Preferences
 

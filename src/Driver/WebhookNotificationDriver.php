@@ -9,15 +9,13 @@ use Flarum\Settings\SettingsRepositoryInterface;
 use Flarum\User\User;
 use Illuminate\Contracts\Queue\Queue;
 use ImportAI\WebhookNotification\Job\SendWebhookNotificationJob;
-use ImportAI\WebhookNotification\Service\NotificationTitleRegistry;
 
 class WebhookNotificationDriver implements NotificationDriverInterface
 {
     public function __construct(
         protected Queue $queue,
         protected SettingsRepositoryInterface $settings,
-        protected LocaleManager $locales,
-        protected NotificationTitleRegistry $titleRegistry
+        protected LocaleManager $locales
     ) {}
 
     public function send(BlueprintInterface $blueprint, array $users): void
@@ -25,7 +23,6 @@ class WebhookNotificationDriver implements NotificationDriverInterface
         $url = $this->settings->get('import-ai-webhook-notification.webhook_url');
         if (!$url) return;
 
-        // Filter users who have webhook enabled for this notification type
         $type = $blueprint::getType();
         $filteredUsers = array_filter($users, fn($u) =>
             $u->getPreference(User::getNotificationPreferenceKey($type, 'webhook'))
@@ -33,32 +30,19 @@ class WebhookNotificationDriver implements NotificationDriverInterface
 
         if (empty($filteredUsers)) return;
 
-        // Get the base title parameters (discussion title, etc.)
-        $titleParams = $this->getTitleParams($blueprint);
+        // Group users by locale and generate per-user titles
+        $defaultLocale = $this->locales->getLocale();
+        $usersByLocale = [];
 
-        // Get excerpt from subject if available (e.g., post content)
-        $excerpt = $this->getExcerpt($blueprint);
+        foreach ($filteredUsers as $user) {
+            $locale = $user->getPreference('locale', $defaultLocale);
+            $usersByLocale[$locale][] = $user;
+        }
 
-        // Get URL to the subject
-        $subjectUrl = $this->getSubjectUrl($blueprint);
-
-        // Group users by their locale preference
-        $usersByLocale = $this->groupUsersByLocale($filteredUsers);
-
-        // Generate per-user data with localized titles
         $usersWithLang = [];
-
         foreach ($usersByLocale as $locale => $localeUsers) {
-            // Get the translated title for this locale
-            // Pass blueprint and related info for both registered callbacks and auto-discovery
-            $title = $this->titleRegistry->getTitle(
-                $type,
-                $titleParams,
-                $locale,
-                $blueprint::getSubjectModel(),
-                get_class($blueprint),
-                $blueprint
-            );
+            $this->locales->setLocale($locale);
+            $title = $this->getTitle($type, $blueprint);
 
             foreach ($localeUsers as $user) {
                 $userData = $user->toArray();
@@ -68,6 +52,9 @@ class WebhookNotificationDriver implements NotificationDriverInterface
             }
         }
 
+        // Restore default locale
+        $this->locales->setLocale($defaultLocale);
+
         $this->queue->push(new SendWebhookNotificationJob(
             url: $url,
             payload: [
@@ -75,9 +62,6 @@ class WebhookNotificationDriver implements NotificationDriverInterface
                 'timestamp' => \Illuminate\Support\Carbon::now()->toIso8601String(),
                 'type' => $type,
                 'subject_model' => $blueprint::getSubjectModel(),
-                'title' => $titleParams['{title}'] ?? null,
-                'content' => $excerpt,
-                'url' => $subjectUrl,
                 'from_user' => $blueprint->getFromUser()?->toArray(),
                 'subject' => $blueprint->getSubject()?->toArray(),
                 'data' => $blueprint->getData(),
@@ -89,159 +73,165 @@ class WebhookNotificationDriver implements NotificationDriverInterface
     }
 
     /**
-     * Group users by their locale preference.
-     *
-     * @param User[] $users
-     * @return array<string, User[]>
+     * Get translated title for a notification type using auto-discovery.
      */
-    private function groupUsersByLocale(array $users): array
+    private function getTitle(string $type, BlueprintInterface $blueprint): string
     {
-        $defaultLocale = $this->settings->get('default_locale', 'en');
-        $groups = [];
-
-        foreach ($users as $user) {
-            $locale = $user->getPreference('locale', $defaultLocale);
-            $groups[$locale][] = $user;
-        }
-
-        return $groups;
-    }
-
-    /**
-     * Extract parameters needed for the notification title translation.
-     */
-    private function getTitleParams(BlueprintInterface $blueprint): array
-    {
+        $translator = $this->locales->getTranslator();
         $fromUser = $blueprint->getFromUser();
-        $subject = $blueprint->getSubject();
 
+        // Build translation parameters
         $params = [];
-
-        // Add from_user display name (used by notification text translations)
         if ($fromUser) {
-            $params['{from_user}'] = $fromUser->display_name;
             $params['{username}'] = $fromUser->display_name;
             $params['user'] = $fromUser;
         }
 
-        // Extract title from subject (discussion title)
-        if ($subject) {
-            // For discussions, use the title directly
-            if (method_exists($subject, 'getAttribute') && ($title = $subject->getAttribute('title'))) {
-                $params['{title}'] = $title;
-            } elseif (isset($subject->title)) {
-                $params['{title}'] = $subject->title;
-            }
+        // Auto-discover translation key
+        $key = $this->discoverTranslationKey($type, $blueprint);
 
-            // For posts, get the discussion title
-            if (method_exists($subject, 'discussion') && $subject->discussion) {
-                $params['{title}'] = $subject->discussion->title;
+        if ($key) {
+            $title = $translator->trans($key, $params);
+            if ($title !== $key) {
+                return $title;
             }
         }
 
-        return $params;
+        // Fallback to generic
+        return $translator->trans('core.forum.settings.notification_checkbox_a11y_label_template', [
+            '{description}' => $type,
+            '{method}' => 'webhook',
+        ]);
     }
 
     /**
-     * Extract excerpt from the notification subject (e.g., post content).
+     * Auto-discover the translation key for a notification type.
      */
-    private function getExcerpt(BlueprintInterface $blueprint): ?string
+    private function discoverTranslationKey(string $type, BlueprintInterface $blueprint): ?string
     {
-        $subject = $blueprint->getSubject();
+        $snakeType = $this->toSnakeCase($type);
+        $prefixes = $this->getExtensionPrefixes($blueprint);
 
-        if (!$subject) {
-            return null;
+        // Try notification text patterns first (preferred)
+        foreach ($prefixes as $ext) {
+            $key = "{$ext}.forum.notifications.{$snakeType}_text";
+            if ($this->translationExists($key)) {
+                return $key;
+            }
         }
 
-        // Try to get content from the subject (posts have content)
-        $content = null;
-
-        if (method_exists($subject, 'getAttribute')) {
-            $content = $subject->getAttribute('content');
+        // Fallback to settings label patterns
+        foreach ($prefixes as $ext) {
+            $key = "{$ext}.forum.settings.notify_{$snakeType}_label";
+            if ($this->translationExists($key)) {
+                return $key;
+            }
         }
 
-        if ($content === null && isset($subject->content)) {
-            $content = $subject->content;
-        }
-
-        // Try contentPlain method (available in Flarum 2.0+)
-        if ($content === null && method_exists($subject, 'contentPlain')) {
-            $content = $subject->contentPlain();
-        }
-
-        if ($content === null) {
-            return null;
-        }
-
-        // Truncate to 200 characters (matching Flarum's frontend)
-        $excerpt = strip_tags($content);
-        if (strlen($excerpt) > 200) {
-            $excerpt = substr($excerpt, 0, 197) . '...';
-        }
-
-        return $excerpt;
+        return null;
     }
 
     /**
-     * Build the URL to the notification subject.
+     * Get possible extension prefixes from blueprint and subject.
+     *
+     * @return string[]
      */
-    private function getSubjectUrl(BlueprintInterface $blueprint): ?string
+    private function getExtensionPrefixes(BlueprintInterface $blueprint): array
     {
-        $subject = $blueprint->getSubject();
-        $data = $blueprint->getData() ?? [];
+        $prefixes = [];
 
-        if (!$subject) {
+        // From subject model namespace
+        $subjectModel = $blueprint::getSubjectModel();
+        if ($subjectModel) {
+            $prefix = $this->deriveExtensionFromClass($subjectModel);
+            if ($prefix) {
+                $prefixes[] = $prefix;
+            }
+        }
+
+        // From blueprint class namespace
+        $prefix = $this->deriveExtensionFromClass(get_class($blueprint));
+        if ($prefix && !in_array($prefix, $prefixes)) {
+            $prefixes[] = $prefix;
+        }
+
+        // From type prefix if it contains a dot (e.g., "my-extension.myType")
+        if (str_contains($blueprint::getType(), '.')) {
+            $parts = explode('.', $blueprint::getType());
+            if (!in_array($parts[0], $prefixes)) {
+                $prefixes[] = $parts[0];
+            }
+        }
+
+        return $prefixes;
+    }
+
+    /**
+     * Derive extension prefix from a class namespace.
+     *
+     * Examples:
+     * - "Flarum\Discussion\Discussion" -> "core"
+     * - "Flarum\Subscriptions\..." -> "flarum-subscriptions"
+     * - "Vendor\ExtensionName\..." -> "vendor-extension-name"
+     */
+    private function deriveExtensionFromClass(string $className): ?string
+    {
+        if (!str_contains($className, '\\')) {
             return null;
         }
 
-        // Get base URL from settings
-        $baseUrl = $this->settings->get('forum_canonical_url') ?? $this->settings->get('url');
+        $parts = explode('\\', $className);
 
-        // Build URL based on subject type
-        if (method_exists($subject, 'discussion')) {
-            // It's a post - link to discussion with post number
-            $discussion = $subject->discussion;
-            if ($discussion) {
-                $postNumber = $data['postNumber'] ?? $data['replyNumber'] ?? $subject->number ?? null;
-                $slug = $this->slugify($discussion->title);
-                $url = "{$baseUrl}/d/{$discussion->id}-{$slug}";
-                if ($postNumber) {
-                    $url .= "/{$postNumber}";
+        // Flarum core classes
+        if ($parts[0] === 'Flarum') {
+            if (count($parts) >= 2) {
+                // Core models: Discussion, Post, User, Group
+                if (in_array($parts[1], ['Discussion', 'Post', 'User', 'Group'])) {
+                    return 'core';
                 }
-                return $url;
+                // Bundled extensions: Subscriptions, Mentions, etc.
+                return 'flarum-' . $this->toKebabCase($parts[1]);
             }
+            return 'core';
         }
 
-        // It's a discussion
-        if (method_exists($subject, 'getAttribute') && $subject->getAttribute('title')) {
-            $slug = $this->slugify($subject->title);
-            $postNumber = $data['postNumber'] ?? null;
-            $url = "{$baseUrl}/d/{$subject->id}-{$slug}";
-            if ($postNumber) {
-                $url .= "/{$postNumber}";
-            }
-            return $url;
+        // Third-party extensions
+        if (count($parts) >= 2) {
+            $vendor = $this->toKebabCase($parts[0]);
+            $package = $this->toKebabCase($parts[1]);
+            return "{$vendor}-{$package}";
         }
 
-        return $baseUrl;
+        return null;
     }
 
     /**
-     * Create a URL-friendly slug from a string.
+     * Check if a translation exists for the given key.
      */
-    private function slugify(string $text): string
+    private function translationExists(string $key): bool
     {
-        // Convert to lowercase and replace spaces with hyphens
-        $text = strtolower($text);
-        $text = preg_replace('/[^\w\s-]/', '', $text);
-        $text = preg_replace('/[\s]+/', '-', $text);
-        $text = trim($text, '-');
-        return $text;
+        $translator = $this->locales->getTranslator();
+        return $translator->trans($key) !== $key;
+    }
+
+    /**
+     * Convert camelCase/PascalCase to snake_case.
+     */
+    private function toSnakeCase(string $text): string
+    {
+        return strtolower(preg_replace('/([a-z])([A-Z])/', '$1_$2', $text));
+    }
+
+    /**
+     * Convert PascalCase to kebab-case.
+     */
+    private function toKebabCase(string $text): string
+    {
+        return strtolower(preg_replace('/([a-z])([A-Z])/', '$1-$2', $text));
     }
 
     public function registerType(string $blueprintClass, array $driversEnabledByDefault): void
     {
-        // Register preference so the option appears in user settings
         User::registerPreference(
             User::getNotificationPreferenceKey($blueprintClass::getType(), 'webhook'),
             'boolval',
