@@ -51,9 +51,62 @@ Passthrough mode sends all notification data without filtering. Model objects ar
   "from_user": { "id": 1, "username": "...", "display_name": "...", "email": "..." },
   "subject": { "id": 1, "discussion_id": 2, "user_id": 1, "...": "..." },
   "data": {},
-  "users": [{ "id": 1, "username": "...", "display_name": "...", "email": "..." }]
+  "users": [
+    {
+      "id": 1,
+      "username": "...",
+      "display_name": "...",
+      "email": "...",
+      "lang": "en",
+      "title": "John posted"
+    }
+  ]
 }
 ```
+
+#### Payload Fields
+
+| Field | Description |
+|-------|-------------|
+| `event` | Always "notification" |
+| `timestamp` | ISO8601 timestamp of when the notification was triggered |
+| `type` | Notification type (e.g., `newPost`, `postMentioned`) |
+| `subject_model` | Class name of the subject (e.g., `Flarum\Post\Post`) |
+| `from_user` | User who triggered the notification |
+| `subject` | The notification subject (post/discussion object) |
+| `data` | Additional data from the blueprint (e.g., `postNumber`) |
+| `users` | Array of users who should receive this notification |
+
+#### Per-User Localization
+
+Each user object in the `users` array includes:
+- `lang`: The user's preferred locale (e.g., `en`, `zh-Hans`)
+- `title`: The notification title translated to the user's preferred language
+
+The titles are generated using **auto-discovered translation keys** from Flarum's notification dropdown UI. The extension automatically finds the correct translation key by:
+
+1. Deriving the extension name from the subject model or blueprint namespace
+2. Trying the pattern: `{extension}.forum.notifications.{snake_case_type}_text`
+3. Falling back to: `{extension}.forum.settings.notify_{snake_case_type}_label`
+
+**Examples:**
+
+| Type | Discovered Key | English Text |
+|------|----------------|--------------|
+| `discussionRenamed` | `core.forum.notifications.discussion_renamed_text` | "{username} changed the title" |
+| `newPost` | `flarum-subscriptions.forum.notifications.new_post_text` | "{username} posted" |
+| `postMentioned` | `flarum-mentions.forum.notifications.post_mentioned_text` | "{username} replied to your post" |
+
+**Extension Namespace Mapping:**
+
+| Namespace | Extension Prefix |
+|-----------|------------------|
+| `Flarum\Discussion\...` | `core` |
+| `Flarum\Subscriptions\...` | `flarum-subscriptions` |
+| `Flarum\Mentions\...` | `flarum-mentions` |
+| `Vendor\ExtensionName\...` | `vendor-extension-name` |
+
+If a user's locale preference is not set, the forum's default locale is used. The extension automatically switches the translator locale for each user group to generate appropriate titles.
 
 ### User Notification Preferences
 
@@ -97,5 +150,3 @@ refactor(tasks): Add timeout status
 
 - "Generated with Claude Code" or similar attribution
 - "Co-Authored-By: Claude" or any Claude co-author tags
-
-
