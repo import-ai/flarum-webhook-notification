@@ -41,8 +41,7 @@ class WebhookNotificationDriver implements NotificationDriverInterface
 
         $usersWithLang = [];
         foreach ($usersByLocale as $locale => $localeUsers) {
-            $this->locales->setLocale($locale);
-            $title = $this->getTitle($type, $blueprint);
+            $title = $this->getTitle($type, $blueprint, $locale);
 
             foreach ($localeUsers as $user) {
                 $userData = $user->toArray();
@@ -51,9 +50,6 @@ class WebhookNotificationDriver implements NotificationDriverInterface
                 $usersWithLang[] = $userData;
             }
         }
-
-        // Restore default locale
-        $this->locales->setLocale($defaultLocale);
 
         $this->queue->push(new SendWebhookNotificationJob(
             url: $url,
@@ -75,7 +71,7 @@ class WebhookNotificationDriver implements NotificationDriverInterface
     /**
      * Get translated title for a notification type using auto-discovery.
      */
-    private function getTitle(string $type, BlueprintInterface $blueprint): string
+    private function getTitle(string $type, BlueprintInterface $blueprint, string $locale): string
     {
         $translator = $this->locales->getTranslator();
         $fromUser = $blueprint->getFromUser();
@@ -88,10 +84,10 @@ class WebhookNotificationDriver implements NotificationDriverInterface
         }
 
         // Auto-discover translation key
-        $key = $this->discoverTranslationKey($type, $blueprint);
+        $key = $this->discoverTranslationKey($type, $blueprint, $locale);
 
         if ($key) {
-            $title = $translator->trans($key, $params);
+            $title = $translator->trans($key, $params, null, $locale);
             if ($title !== $key) {
                 return $title;
             }
@@ -101,13 +97,13 @@ class WebhookNotificationDriver implements NotificationDriverInterface
         return $translator->trans('core.forum.settings.notification_checkbox_a11y_label_template', [
             '{description}' => $type,
             '{method}' => 'webhook',
-        ]);
+        ], null, $locale);
     }
 
     /**
      * Auto-discover the translation key for a notification type.
      */
-    private function discoverTranslationKey(string $type, BlueprintInterface $blueprint): ?string
+    private function discoverTranslationKey(string $type, BlueprintInterface $blueprint, string $locale): ?string
     {
         $snakeType = $this->toSnakeCase($type);
         $prefixes = $this->getExtensionPrefixes($blueprint);
@@ -115,7 +111,7 @@ class WebhookNotificationDriver implements NotificationDriverInterface
         // Try notification text patterns first (preferred)
         foreach ($prefixes as $ext) {
             $key = "{$ext}.forum.notifications.{$snakeType}_text";
-            if ($this->translationExists($key)) {
+            if ($this->translationExists($key, $locale)) {
                 return $key;
             }
         }
@@ -123,7 +119,7 @@ class WebhookNotificationDriver implements NotificationDriverInterface
         // Fallback to settings label patterns
         foreach ($prefixes as $ext) {
             $key = "{$ext}.forum.settings.notify_{$snakeType}_label";
-            if ($this->translationExists($key)) {
+            if ($this->translationExists($key, $locale)) {
                 return $key;
             }
         }
@@ -208,10 +204,10 @@ class WebhookNotificationDriver implements NotificationDriverInterface
     /**
      * Check if a translation exists for the given key.
      */
-    private function translationExists(string $key): bool
+    private function translationExists(string $key, string $locale): bool
     {
         $translator = $this->locales->getTranslator();
-        return $translator->trans($key) !== $key;
+        return $translator->trans($key, [], null, $locale) !== $key;
     }
 
     /**
