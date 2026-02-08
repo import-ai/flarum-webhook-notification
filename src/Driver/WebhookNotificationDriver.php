@@ -31,11 +31,11 @@ class WebhookNotificationDriver implements NotificationDriverInterface
         if (empty($filteredUsers)) return;
 
         // Group users by locale and generate per-user titles
-        $defaultLocale = $this->locales->getLocale();
+        $defaultLocale = $this->settings->get('default_locale', 'en');
         $usersByLocale = [];
 
         foreach ($filteredUsers as $user) {
-            $locale = $user->getPreference('locale', $defaultLocale);
+            $locale = $user->getPreference('locale') ?: $defaultLocale;
             $usersByLocale[$locale][] = $user;
         }
 
