@@ -35,7 +35,7 @@ class WebhookNotificationDriver implements NotificationDriverInterface
         $usersByLocale = [];
 
         foreach ($filteredUsers as $user) {
-            $locale = $user->getPreference('locale', $defaultLocale);
+            $locale = $user->getPreference('locale') ?: $defaultLocale;
             $usersByLocale[$locale][] = $user;
         }
 
