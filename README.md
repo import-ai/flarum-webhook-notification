@@ -51,7 +51,7 @@ Passthrough mode sends all notification data without filtering. Model objects ar
   "from_user": { "id": 1, "username": "...", "display_name": "...", "email": "..." },
   "subject": { "id": 1, "discussion_id": 2, "user_id": 1, "...": "..." },
   "data": {},
-  "users": [
+  "recipients": [
     {
       "id": 1,
       "username": "...",
@@ -74,11 +74,11 @@ Passthrough mode sends all notification data without filtering. Model objects ar
 | `from_user` | User who triggered the notification |
 | `subject` | The notification subject (post/discussion object) |
 | `data` | Additional data from the blueprint (e.g., `postNumber`) |
-| `users` | Array of users who should receive this notification |
+| `recipients` | Array of users who should receive this notification |
 
 #### Per-User Locale
 
-Each user object in the `users` array includes:
+Each user object in the `recipients` array includes:
 - `locale`: The user's preferred locale (e.g., `en`, `zh-Hans`)
 
 If a user's locale preference is not set, the forum's default locale is used.

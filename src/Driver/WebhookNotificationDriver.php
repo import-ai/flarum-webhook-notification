@@ -30,7 +30,7 @@ class WebhookNotificationDriver implements NotificationDriverInterface
 
         $defaultLocale = $this->settings->get('default_locale', 'en');
 
-        $usersWithLang = array_map(function ($user) use ($defaultLocale) {
+        $recipients = array_map(function ($user) use ($defaultLocale) {
             $userData = $user->toArray();
             $userData['locale'] = $user->getPreference('locale') ?: $defaultLocale;
             return $userData;
@@ -46,7 +46,7 @@ class WebhookNotificationDriver implements NotificationDriverInterface
                 'from_user' => $blueprint->getFromUser()?->toArray(),
                 'subject' => $blueprint->getSubject()?->toArray(),
                 'data' => $blueprint->getData(),
-                'users' => $usersWithLang,
+                'recipients' => $recipients,
             ],
             token: $this->settings->get('import-ai-webhook-notification.webhook_token'),
             timeout: (int) $this->settings->get('import-ai-webhook-notification.timeout', 30)
