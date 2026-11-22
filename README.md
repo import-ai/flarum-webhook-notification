@@ -125,3 +125,11 @@ refactor(tasks): Add timeout status
 
 - "Generated with Claude Code" or similar attribution
 - "Co-Authored-By: Claude" or any Claude co-author tags
+
+### OmniBox test deployment
+
+Open a same-repository PR to `main` from a branch named
+`feat/flarum-webhook-notification-<description>-<requirement-id>`. After the
+`Test forum candidate` workflow passes, submit the requirement in Fuck ENV.
+The deployment verifies the selected Composer revision after recreating the
+test forum. No forum event is needed for this check.
